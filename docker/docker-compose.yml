@@ -1,0 +1,224 @@
+version: '3.8'
+
+# ============================================================
+# 鱼苗供需平台 (Fish Seedling Platform) 后端基础设施
+# 基于 backend/pom.xml 和 application.yaml 中的依赖与配置
+# ============================================================
+#
+# 包含服务:
+#   - MySQL 8.0        (主业务数据库，端口 3306)
+#   - PostgreSQL 15    (LangChain4j 聊天记忆/检查点存储，端口 5432)
+#   - Redis 7          (缓存/会话，端口 6379)
+#   - Milvus 2.4       (向量数据库/RAG 知识库，端口 19530)
+#   - Ollama           (本地 Embedding 模型，端口 11434)
+#   - Canal Server     (MySQL binlog 同步，端口 11111) [可选]
+#
+# 快速启动:
+#   docker-compose up -d
+#   docker-compose down -v   (删除所有数据)
+# ============================================================
+
+services:
+
+  # ==================== MySQL ====================
+  mysql:
+    image: mysql:8.0
+    container_name: fish-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: fish_seedling_platform
+      TZ: Asia/Shanghai
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./mysql/conf.d:/etc/mysql/conf.d          # 自定义配置
+      - ./mysql/init:/docker-entrypoint-initdb.d   # 初始化 SQL 脚本
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-time-zone=+08:00
+      - --log-bin=mysql-bin                         # 开启 binlog（Canal 需要）
+      - --binlog-format=ROW                         # Canal 要求 ROW 格式
+      - --server-id=1
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - fish-net
+
+  # ==================== PostgreSQL ====================
+  postgresql:
+    image: postgres:15
+    container_name: fish-postgresql
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: root
+      POSTGRES_DB: fish_seedling_platform
+      TZ: Asia/Shanghai
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgresql-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d fish_seedling_platform"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - fish-net
+
+  # ==================== Redis ====================
+  redis:
+    image: redis:7-alpine
+    container_name: fish-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - fish-net
+
+  # ==================== Milvus (向量数据库) ====================
+  # Milvus Standalone 依赖 etcd 和 MinIO
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.5
+    container_name: fish-etcd
+    restart: unless-stopped
+    environment:
+      - ETCD_AUTO_COMPACTION_MODE=revision
+      - ETCD_AUTO_COMPACTION_RETENTION=1000
+      - ETCD_QUOTA_BACKEND_BYTES=4294967296
+      - ETCD_SNAPSHOT_COUNT=50000
+    volumes:
+      - etcd-data:/etcd
+    command: etcd -advertise-client-urls=http://127.0.0.1:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
+    healthcheck:
+      test: ["CMD", "etcdctl", "endpoint", "health"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    networks:
+      - fish-net
+
+  minio:
+    image: minio/minio:RELEASE.2023-03-20T20-16-18Z
+    container_name: fish-minio
+    restart: unless-stopped
+    environment:
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+    volumes:
+      - minio-data:/minio_data
+    command: minio server /minio_data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    ports:
+      - "9001:9001"
+    networks:
+      - fish-net
+
+  milvus:
+    image: milvusdb/milvus:v2.4.0
+    container_name: fish-milvus
+    restart: unless-stopped
+    depends_on:
+      etcd:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      ETCD_ENDPOINTS: etcd:2379
+      MINIO_ADDRESS: minio:9000
+      MINIO_ACCESS_KEY_ID: minioadmin
+      MINIO_SECRET_ACCESS_KEY: minioadmin
+    ports:
+      - "19530:19530"
+      - "9091:9091"
+    volumes:
+      - milvus-data:/var/lib/milvus
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    networks:
+      - fish-net
+
+  # ==================== Ollama (Embedding 模型) ====================
+  ollama:
+    image: ollama/ollama:latest
+    container_name: fish-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    environment:
+      - OLLAMA_KEEP_ALIVE=24h
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      - fish-net
+    # 启动后需要手动拉取模型:
+    #   docker exec -it fish-ollama ollama pull qwen3-embedding:0.6b
+
+  # ==================== Canal Server [可选] ====================
+  # Canal 需要 MySQL 开启 binlog（已在 MySQL 中配置）
+  # 如果不需要实时同步 MySQL 数据到 Milvus，可以注释掉此服务
+  canal:
+    image: canal/canal-server:v1.1.8
+    container_name: fish-canal
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      - canal.instance.master.address=mysql:3306
+      - canal.instance.dbUsername=root
+      - canal.instance.dbPassword=root
+      - canal.instance.connectionCharset=UTF-8
+      - canal.instance.filter.regex=fish_seedling_platform\\..*
+      - canal.admin.port=11110
+    ports:
+      - "11111:11111"
+      - "11110:11110"
+    volumes:
+      - canal-data:/home/admin/canal-server
+    networks:
+      - fish-net
+
+# ==================== 数据卷 ====================
+volumes:
+  mysql-data:
+  postgresql-data:
+  redis-data:
+  etcd-data:
+  minio-data:
+  milvus-data:
+  ollama-data:
+  canal-data:
+
+# ==================== 网络 ====================
+networks:
+  fish-net:
+    driver: bridge
