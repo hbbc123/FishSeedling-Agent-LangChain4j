@@ -1,0 +1,171 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.fishseedling.platform.mapper.PostMapper">
+
+    <!-- 结果映射 -->
+    <resultMap id="BaseResultMap" type="com.fishseedling.platform.entity.Post">
+        <id column="id" property="id"/>
+        <result column="type" property="type"/>
+        <result column="fish_breed" property="fishBreed"/>
+        <result column="specification" property="specification"/>
+        <result column="quantity" property="quantity"/>
+        <result column="price" property="price"/>
+        <result column="price_unit" property="priceUnit"/>
+        <result column="province" property="province"/>
+        <result column="city" property="city"/>
+        <result column="district" property="district"/>
+        <result column="detail_address" property="detailAddress"/>
+        <result column="description" property="description"/>
+        <result column="images" property="images" typeHandler="com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler"/>
+        <result column="contact_person" property="contactPerson"/>
+        <result column="contact_phone" property="contactPhone"/>
+        <result column="manage_code" property="manageCode"/>
+        <result column="manage_code_expire_time" property="manageCodeExpireTime"/>
+        <result column="status" property="status"/>
+        <result column="reject_reason" property="rejectReason"/>
+        <result column="is_top" property="isTop"/>
+        <result column="top_expire_time" property="topExpireTime"/>
+        <result column="view_count" property="viewCount"/>
+        <result column="phone_view_count" property="phoneViewCount"/>
+        <result column="valid_days" property="validDays"/>
+        <result column="expire_time" property="expireTime"/>
+        <result column="publisher_ip" property="publisherIp"/>
+        <result column="publisher_device" property="publisherDevice"/>
+        <result column="admin_notes" property="adminNotes"/>
+        <result column="auditor_id" property="auditorId"/>
+        <result column="audit_time" property="auditTime"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <!-- 多条件动态查询SQL（空字段不查询） -->
+    <select id="selectPageByConditions" resultMap="BaseResultMap">
+        SELECT * FROM tb_posts
+        <where>
+            <!-- 类型筛选 -->
+            <if test="params.type != null and params.type != ''">
+                AND type = #{params.type}
+            </if>
+            <!-- 品种筛选 -->
+            <if test="params.fishBreed != null and params.fishBreed != ''">
+                AND fish_breed = #{params.fishBreed}
+            </if>
+            <!-- 品种模糊搜索 -->
+            <if test="params.fishBreedLike != null and params.fishBreedLike != ''">
+                AND fish_breed LIKE CONCAT('%', #{params.fishBreedLike}, '%')
+            </if>
+            <!-- 省市区三级搜索：支持单独搜索省、市、区 -->
+            <if test="params.province != null and params.province != ''">
+                <choose>
+                    <!-- 如果同时指定了市和区，精确匹配三级 -->
+                    <when test="params.city != null and params.city != '' and params.district != null and params.district != ''">
+                        AND province LIKE CONCAT('%', #{params.province}, '%')
+                        AND city LIKE CONCAT('%', #{params.city}, '%')
+                        AND district   LIKE CONCAT('%', #{params.district}, '%')
+                    </when>
+                    <!-- 如果只指定了省和市，匹配省和市 -->
+                    <when test="params.city != null and params.city != ''">
+                        AND province  LIKE CONCAT('%', #{params.province}, '%')
+                        AND city LIKE CONCAT('%', #{params.city}, '%')
+                    </when>
+                    <!-- 如果只指定了省，匹配该省所有数据 -->
+                    <otherwise>
+                        AND province LIKE CONCAT('%', #{params.province}, '%')
+                    </otherwise>
+                </choose>
+            </if>
+            <!-- 单独的城市筛选（当没有省份时） -->
+            <if test="(params.province == null or params.province == '') and params.city != null and params.city != ''">
+                AND city = #{params.city}
+            </if>
+            <!-- 单独的区县筛选（当没有省市时） -->
+            <if test="(params.province == null or params.province == '') and (params.city == null or params.city == '') and params.district != null and params.district != ''">
+                AND district = #{params.district}
+            </if>
+            <!-- 状态筛选 -->
+            <if test="params.status != null and params.status != ''">
+                AND status = #{params.status}
+            </if>
+            <!-- 状态IN查询 -->
+            <if test="params.statusList != null and params.statusList.size() > 0">
+                AND status IN
+                <foreach collection="params.statusList" item="item" open="(" separator="," close=")">
+                    #{item}
+                </foreach>
+            </if>
+            <!-- 是否置顶 -->
+            <if test="params.isTop != null">
+                AND is_top = #{params.isTop}
+            </if>
+            <!-- 价格区间筛选 -->
+            <if test="params.minPrice != null">
+                AND price &gt;= #{params.minPrice}
+            </if>
+            <if test="params.maxPrice != null">
+                AND price &lt;= #{params.maxPrice}
+            </if>
+            <if test="params.priceUnit != null">
+                AND price_unit = #{params.priceUnit}
+            </if>
+
+
+            <!-- 联系人搜索 -->
+            <if test="params.contactPerson != null and params.contactPerson != ''">
+                AND contact_person LIKE CONCAT('%', #{params.contactPerson}, '%')
+            </if>
+            <!-- 联系电话搜索 -->
+            <if test="params.contactPhone != null and params.contactPhone != ''">
+                AND contact_phone LIKE CONCAT('%', #{params.contactPhone}, '%')
+            </if>
+            <!-- 发布时间范围 -->
+            <if test="params.startTime != null">
+                AND create_time &gt;= #{params.startTime}
+            </if>
+            <if test="params.endTime != null">
+                AND create_time &lt;= #{params.endTime}
+            </if>
+            <!-- 管理码查询 -->
+            <if test="params.manageCode != null and params.manageCode != ''">
+                AND manage_code = #{params.manageCode}
+            </if>
+            <!-- 关键词搜索（标题、品种、描述） -->
+            <if test="params.keyword != null and params.keyword != ''">
+                OR (
+                fish_breed LIKE CONCAT('%', #{params.keyword}, '%')
+                OR specification LIKE CONCAT('%', #{params.keyword}, '%')
+                OR description LIKE CONCAT('%', #{params.keyword}, '%')
+                )
+            </if>
+        </where>
+        <!-- 排序 -->
+        <choose>
+            <!-- 置顶优先 -->
+            <when test="params.orderBy == 'top'">
+                ORDER BY is_top DESC, create_time DESC
+            </when>
+            <!-- 按价格排序 -->
+            <when test="params.orderBy == 'price_asc'">
+                ORDER BY price ASC, create_time DESC
+            </when>
+            <when test="params.orderBy == 'price_desc'">
+                ORDER BY price DESC, create_time DESC
+            </when>
+            <!-- 按浏览量排序 -->
+            <when test="params.orderBy == 'view'">
+                ORDER BY view_count DESC, create_time DESC
+            </when>
+            <!-- 默认按创建时间倒序 -->
+            <otherwise>
+                ORDER BY is_top DESC, create_time DESC
+            </otherwise>
+        </choose>
+    </select>
+
+    <!-- 根据ID查询详情（确保使用ResultMap处理JSON字段） -->
+    <select id="selectDetailById" resultMap="BaseResultMap">
+        SELECT * FROM tb_posts WHERE id = #{id}
+    </select>
+
+</mapper>
+

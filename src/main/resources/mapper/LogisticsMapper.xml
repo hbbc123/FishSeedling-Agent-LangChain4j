@@ -1,0 +1,181 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.fishseedling.platform.mapper.LogisticsMapper">
+
+    <resultMap id="BaseResultMap" type="com.fishseedling.platform.entity.Logistics">
+        <id column="id" property="id"/>
+        <result column="vehicle_type" property="vehicleType"/>
+        <result column="plate_number" property="plateNumber"/>
+        <result column="max_load" property="maxLoad"/>
+        <result column="province" property="province"/>
+        <result column="city" property="city"/>
+        <result column="district" property="district"/>
+        <result column="driver_name" property="driverName"/>
+        <result column="contact_phone" property="contactPhone"/>
+        <result column="price_per_km" property="pricePerKm"/>
+        <result column="base_price" property="basePrice"/>
+        <result column="base_km" property="baseKm"/>
+        <result column="vehicle_brand" property="vehicleBrand"/>
+        <result column="vehicle_size" property="vehicleSize"/>
+        <result column="vehicle_age" property="vehicleAge"/>
+        <result column="operation_license" property="operationLicense"/>
+        <result column="suggested_load" property="suggestedLoad"/>
+        <result column="oxygen_equipment" property="oxygenEquipment"/>
+        <result column="oxygen_count" property="oxygenCount"/>
+        <result column="oxygen_power" property="oxygenPower"/>
+        <result column="has_refrigeration" property="hasRefrigeration"/>
+        <result column="temp_range" property="tempRange"/>
+        <result column="has_insulation" property="hasInsulation"/>
+        <result column="has_oxygen_system" property="hasOxygenSystem"/>
+        <result column="has_water_circulation" property="hasWaterCirculation"/>
+        <result column="water_tank_capacity" property="waterTankCapacity"/>
+        <result column="service_scope" property="serviceScope"/>
+        <result column="service_areas" property="serviceAreas" 
+                typeHandler="com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler"/>
+        <result column="accept_long_distance" property="acceptLongDistance"/>
+        <result column="excluded_areas" property="excludedAreas"/>
+        <result column="price_unit" property="priceUnit"/>
+        <result column="include_toll" property="includeToll"/>
+        <result column="include_fuel" property="includeFuel"/>
+        <result column="charge_empty_return" property="chargeEmptyReturn"/>
+        <result column="empty_return_rate" property="emptyReturnRate"/>
+        <result column="night_extra_rate" property="nightExtraRate"/>
+        <result column="holiday_extra_rate" property="holidayExtraRate"/>
+        <result column="min_order_amount" property="minOrderAmount"/>
+        <result column="negotiable" property="negotiable"/>
+        <result column="driving_years" property="drivingYears"/>
+        <result column="license_type" property="licenseType"/>
+        <result column="work_years" property="workYears"/>
+        <result column="has_insurance" property="hasInsurance"/>
+        <result column="survival_rate" property="survivalRate"/>
+        <result column="available_time" property="availableTime"/>
+        <result column="response_time" property="responseTime"/>
+        <result column="accept_urgent" property="acceptUrgent"/>
+        <result column="valid_days" property="validDays"/>
+        <result column="expire_time" property="expireTime"/>
+        <result column="service_loading" property="serviceLoading"/>
+        <result column="service_oxygen" property="serviceOxygen"/>
+        <result column="service_packaging" property="servicePackaging"/>
+        <result column="service_cod" property="serviceCod"/>
+        <result column="service_gps" property="serviceGps"/>
+        <result column="payment_method" property="paymentMethod"/>
+        <result column="description" property="description"/>
+        <result column="special_requirements" property="specialRequirements"/>
+        <result column="images" property="images" 
+                typeHandler="com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler"/>
+        <result column="manage_code" property="manageCode"/>
+        <result column="manage_code_expire_time" property="manageCodeExpireTime"/>
+        <result column="status" property="status"/>
+        <result column="reject_reason" property="rejectReason"/>
+        <result column="is_top" property="isTop"/>
+        <result column="top_expire_time" property="topExpireTime"/>
+        <result column="view_count" property="viewCount"/>
+        <result column="phone_view_count" property="phoneViewCount"/>
+        <result column="publisher_ip" property="publisherIp"/>
+        <result column="publisher_device" property="publisherDevice"/>
+        <result column="admin_notes" property="adminNotes"/>
+        <result column="auditor_id" property="auditorId"/>
+        <result column="audit_time" property="auditTime"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <!-- 多条件分页查询 -->
+    <select id="selectPageByConditions" resultMap="BaseResultMap">
+        SELECT * FROM tb_logistics
+        <where>
+            <if test="params.vehicleType != null and params.vehicleType != ''">
+                AND vehicle_type = #{params.vehicleType}
+            </if>
+            <!-- 省市区三级搜索：支持单独搜索省、市、区 -->
+            <if test="params.province != null and params.province != ''">
+                <choose>
+                    <!-- 如果同时指定了市和区，精确匹配三级 -->
+                    <when test="params.city != null and params.city != '' and params.district != null and params.district != ''">
+                        AND province = #{params.province}
+                        AND city = #{params.city}
+                        AND district = #{params.district}
+                    </when>
+                    <!-- 如果只指定了省和市，匹配省和市 -->
+                    <when test="params.city != null and params.city != ''">
+                        AND province = #{params.province}
+                        AND city = #{params.city}
+                    </when>
+                    <!-- 如果只指定了省，匹配该省所有数据 -->
+                    <otherwise>
+                        AND province = #{params.province}
+                    </otherwise>
+                </choose>
+            </if>
+            <!-- 单独的城市筛选（当没有省份时） -->
+            <if test="(params.province == null or params.province == '') and params.city != null and params.city != ''">
+                AND city = #{params.city}
+            </if>
+            <!-- 单独的区县筛选（当没有省市时） -->
+            <if test="(params.province == null or params.province == '') and (params.city == null or params.city == '') and params.district != null and params.district != ''">
+                AND district = #{params.district}
+            </if>
+            <if test="params.serviceScope != null and params.serviceScope != ''">
+                AND service_scope = #{params.serviceScope}
+            </if>
+            <if test="params.hasRefrigeration != null">
+                AND has_refrigeration = #{params.hasRefrigeration}
+            </if>
+            <if test="params.hasOxygenSystem != null">
+                AND has_oxygen_system = #{params.hasOxygenSystem}
+            </if>
+            <if test="params.minLoad != null">
+                AND max_load &gt;= #{params.minLoad}
+            </if>
+            <if test="params.maxLoad != null">
+                AND max_load &lt;= #{params.maxLoad}
+            </if>
+            <if test="params.minPrice != null">
+                AND price_per_km &gt;= #{params.minPrice}
+            </if>
+            <if test="params.maxPrice != null">
+                AND price_per_km &lt;= #{params.maxPrice}
+            </if>
+            <if test="params.status != null and params.status != ''">
+                AND status = #{params.status}
+            </if>
+            <if test="params.keyword != null and params.keyword != ''">
+                AND (
+                    plate_number LIKE CONCAT('%', #{params.keyword}, '%')
+                    OR driver_name LIKE CONCAT('%', #{params.keyword}, '%')
+                    OR description LIKE CONCAT('%', #{params.keyword}, '%')
+                    OR vehicle_brand LIKE CONCAT('%', #{params.keyword}, '%')
+                )
+            </if>
+            <if test="params.driverName != null and params.driverName != ''">
+                AND driver_name LIKE CONCAT('%', #{params.driverName}, '%')
+            </if>
+            <if test="params.plateNumber != null and params.plateNumber != ''">
+                AND plate_number LIKE CONCAT('%', #{params.plateNumber}, '%')
+            </if>
+            <if test="params.contactPhone != null and params.contactPhone != ''">
+                AND contact_phone LIKE CONCAT('%', #{params.contactPhone}, '%')
+            </if>
+            <if test="params.startTime != null and params.startTime != ''">
+                AND create_time &gt;= #{params.startTime}
+            </if>
+            <if test="params.endTime != null and params.endTime != ''">
+                AND create_time &lt;= #{params.endTime}
+            </if>
+        </where>
+        <choose>
+            <when test="params.orderBy == 'viewCount'">
+                ORDER BY is_top DESC, view_count DESC, create_time DESC
+            </when>
+            <when test="params.orderBy == 'pricePerKm'">
+                ORDER BY is_top DESC, price_per_km ASC, create_time DESC
+            </when>
+            <otherwise>
+                ORDER BY is_top DESC, create_time DESC
+            </otherwise>
+        </choose>
+    </select>
+
+</mapper>
+
