@@ -29,7 +29,7 @@
 - 🐛 **20+ 个真实踩坑记录**：SSE 传输、LLM 输出不稳定、StreamingGenerator 桥接等
 
 > ⚠️ 本项目使用的 LangChain4j **Beta 模块**（Milvus、experimental-sql、web-search-engine）均为 `1.15.0-beta25`，官方文档极少，全靠源码调试。
-
+🔗 前端项目地址：[FishSeedling-Agent-Vue](https://github.com/hbbc123/FishSeedling-Agent-Vue)
 ---
 
 ## 🏗️ 模块架构
